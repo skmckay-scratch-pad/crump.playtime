@@ -1,5 +1,5 @@
 ---
-title: "Failure-Probability Sensitivity · flexdashboard"
+title: "Failure Sensitivity · flexdashboard"
 output:
   flexdashboard::flex_dashboard:
     orientation: rows
@@ -8,6 +8,7 @@ output:
       version: 5
       bootswatch: flatly
     self_contained: true
+    css: ../site.css
 ---
 
 ```{r setup, include=FALSE}

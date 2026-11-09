@@ -1,0 +1,19 @@
+/* Shared layout guards for the static pages (Quarto dashboard, flexdashboard,
+   report). Text wraps at word boundaries, values scale with the viewport, and
+   wide tables scroll inside their container instead of spilling out. */
+.bslib-value-box .value-box-title,
+.bslib-value-box .value-box-value { overflow-wrap: normal; word-break: normal; }
+.bslib-value-box .value-box-value { font-size: clamp(1.4rem, calc(1rem + 1.4vw), 2.2rem); line-height: 1.15; }
+.bslib-value-box .value-box-title { font-size: 1rem; }
+.card, .card-body, .cell-output-display { min-width: 0; }
+.cell-output-display, .dataTables_wrapper { max-width: 100%; overflow-x: auto; }
+.dataTables_wrapper .pagination { flex-wrap: wrap; }
+.dataTables_filter label { display: flex; gap: .4rem; align-items: center; max-width: 100%; }
+.dataTables_filter input { min-width: 0; width: 100%; margin-left: 0 !important; }
+/* Report tables: scroll horizontally on narrow screens */
+main table { display: block; max-width: 100%; overflow-x: auto; }
+/* Navbar brand: wrap long titles instead of pushing the menu button off-screen */
+.navbar-brand { white-space: normal; max-width: calc(100vw - 80px); }
+.navbar-header { display: flex; align-items: center; justify-content: space-between; max-width: 100%; }
+.navbar-header .navbar-toggle { flex: none; }
+.navbar-title { white-space: normal; }

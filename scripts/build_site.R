@@ -7,6 +7,9 @@
 # Needs the Quarto CLI plus the R packages rmarkdown, flexdashboard, plotly, DT,
 # crosstalk and shinylive.
 
+# UTF-8 everywhere, including the R sessions Quarto starts (otherwise
+# characters like × and – are written as <U+00D7> escapes)
+Sys.setenv(LANG = "C.UTF-8", LC_ALL = "C.UTF-8")
 Sys.setlocale("LC_ALL", "C.UTF-8")
 stopifnot(file.exists("results/app_data.rds"))
 site <- "site"
@@ -29,7 +32,8 @@ step("Rendering Quarto dashboard")
 quarto_render("apps/quarto-dashboard/dashboard.qmd")
 dir.create(file.path(site, "quarto-dashboard"))
 file.copy("apps/quarto-dashboard/dashboard.html", file.path(site, "quarto-dashboard", "index.html"))
-file.copy("apps/quarto-dashboard/dashboard_files", file.path(site, "quarto-dashboard"), recursive = TRUE)
+if (dir.exists("apps/quarto-dashboard/dashboard_files"))
+  file.copy("apps/quarto-dashboard/dashboard_files", file.path(site, "quarto-dashboard"), recursive = TRUE)
 
 # 3. flexdashboard
 step("Rendering flexdashboard")

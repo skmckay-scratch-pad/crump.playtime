@@ -11,6 +11,7 @@ format:
     embed-resources: true
     fig-width: 9
     fig-height: 5
+    css: ../apps/site.css
 execute:
   warning: false
   message: false
@@ -160,7 +161,9 @@ ggplot(i[i$horizon == 1, ], aes(grade, Ti, colour = parameter, group = parameter
   (mean Tᵢ ≈ `r sprintf("%.2f", agg[agg$Input=="q","Mean Tᵢ"])`).
 
 ```{r seg}
-knitr::kable(A$segment_tests, digits = 3,
+st <- A$segment_tests
+st$p_value <- format.pval(st$p_value, digits = 2); st$p_adj_BH <- format.pval(st$p_adj_BH, digits = 2)
+knitr::kable(st, digits = 3, row.names = FALSE,
              caption = "Kruskal–Wallis: does Tᵢ differ by grade segment? (median Tᵢ per segment)")
 ```
 
@@ -177,7 +180,8 @@ ggplot(en, aes(structure, pct_noninfluential, fill = structure)) +
 ```
 
 ```{r ens_tests}
-knitr::kable(A$structure_tests, digits = 3, caption = "Friedman tests (facility = block)")
+stt <- A$structure_tests; stt$p_value <- format.pval(stt$p_value, digits = 2)
+knitr::kable(stt, digits = 1, caption = "Friedman tests (facility = block)")
 ```
 
 As in the paper, the aggregation structure changes both the median output and
@@ -189,7 +193,9 @@ This is the clearest cost of the 250-iteration cap.
 
 ```{r spearman}
 sp <- A$spearman[A$spearman$p_adj_BH < 0.05, ]
-knitr::kable(sp[order(-abs(sp$rho)), ][1:10, ], digits = 3,
+sp <- sp[order(-abs(sp$rho)), ][1:10, ]
+sp$p_value <- format.pval(sp$p_value, digits = 2); sp$p_adj_BH <- format.pval(sp$p_adj_BH, digits = 2)
+knitr::kable(sp, digits = 3, row.names = FALSE,
              caption = "Strongest Spearman correlations: curve features vs. mean Tᵢ (BH-adjusted p < 0.05)")
 ```
 

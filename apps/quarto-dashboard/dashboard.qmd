@@ -1,8 +1,10 @@
 ---
-title: "Failure-Probability Sensitivity · Quarto dashboard"
+title: "Failure Sensitivity · Quarto"
 format:
   dashboard:
     theme: flatly
+    css: ../site.css
+    embed-resources: true
     nav-buttons:
       - icon: github
         href: https://github.com/skmckay-scratch-pad/crump.playtime
@@ -40,20 +42,20 @@ list(value = nrow(P), icon = "building", color = "primary")
 
 ```{r}
 #| content: valuebox
-#| title: "Annual P(fail), grades A to F-"
+#| title: "Annual P(fail) range"
 list(value = sprintf("%s – %s", fmt_p(min(P[, A$grades])), fmt_p(max(P[, A$grades]))),
      icon = "activity", color = "info")
 ```
 
 ```{r}
 #| content: valuebox
-#| title: "D- → F+ jump (median)"
-list(value = sprintf("×%.2f", median(P[, "F+"] / P[, "D-"])), icon = "graph-up-arrow", color = "warning")
+#| title: "Median D- to F+ jump"
+list(value = sprintf("×%.1f", median(P[, "F+"] / P[, "D-"])), icon = "graph-up-arrow", color = "warning")
 ```
 
 ```{r}
 #| content: valuebox
-#| title: "Iteration cap (n = R)"
+#| title: "Iteration cap"
 list(value = A$settings$iter_cap, icon = "exclamation-triangle", color = "danger")
 ```
 

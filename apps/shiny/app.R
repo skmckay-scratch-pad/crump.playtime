@@ -34,6 +34,30 @@ fmt_p <- function(x) ifelse(x < 0.001, formatC(x, format = "e", digits = 2),
 theme <- bs_theme(version = 5, bootswatch = "flatly", primary = "#2a6f97",
                   base_font = font_collection("system-ui", "sans-serif"))
 
+# Two side-by-side cards on wide screens, stacked below the "xl" breakpoint
+# (1200px; the sidebar takes ~300px), so charts and tables never get squeezed.
+two_col <- function(left = 6) breakpoints(sm = c(12, 12), xl = c(left, 12 - left))
+
+# Layout guards: value-box text scales with the viewport and never breaks
+# mid-word; tables scroll inside their card instead of spilling out of it.
+app_css <- tags$style(HTML("
+  .bslib-value-box .value-box-title { font-size: 0.95rem; overflow-wrap: normal; word-break: normal; }
+  .bslib-value-box .value-box-value { font-size: clamp(1.3rem, 0.9rem + 1.2vw, 1.9rem);
+                                      line-height: 1.15; overflow-wrap: normal; word-break: normal; }
+  .bslib-value-box p { font-size: 0.85rem; margin-bottom: 0; }
+  .table-scroll { overflow-x: auto; max-width: 100%; }
+  .table-scroll table { width: 100%; }
+  .card, .card-body, .bslib-sidebar-layout > .main { min-width: 0; }
+  .dataTables_wrapper { max-width: 100%; overflow-x: auto; }
+  .dataTables_wrapper .pagination { flex-wrap: wrap; }
+  .dataTables_filter label { display: flex; gap: .4rem; align-items: center; max-width: 100%; }
+  .dataTables_filter input { min-width: 0; width: 100%; margin-left: 0 !important; }
+  .selectize-input { overflow: hidden; }
+  .selectize-control.single .selectize-input > .item { white-space: nowrap; overflow: hidden;
+                                                       text-overflow: ellipsis; max-width: calc(100% - 1rem); }
+"))
+tbl <- function(id) div(class = "table-scroll", tableOutput(id))
+
 cap_note <- div(class = "alert alert-warning py-2 small mb-2",
   icon("triangle-exclamation"),
   sprintf(" Every iteration count is capped at %d (base sample, bootstrap replicates, facilities).
@@ -43,9 +67,11 @@ cap_note <- div(class = "alert alert-warning py-2 small mb-2",
 
 # ---- UI -------------------------------------------------------------------------
 ui <- page_navbar(
-  title = "Failure-Probability Sensitivity",
+  title = "Failure Sensitivity",
+  window_title = "Failure-Probability Sensitivity",
   theme = theme,
   fillable = FALSE,
+  header = app_css,
 
   # 1. Data -------------------------------------------------------------------------
   nav_panel("Data", icon = icon("table"),
@@ -61,14 +87,14 @@ ui <- page_navbar(
           "the worst case, shown as a separate point.")
       ),
       card(card_header("Annual failure probability by grade"), plotlyOutput("data_curves", height = 420)),
-      layout_columns(col_widths = c(7, 5),
+      layout_columns(col_widths = two_col(7),
         card(card_header("All groups (log₁₀ P(fail))"), plotlyOutput("data_heat", height = 620)),
-        card(card_header("Data checks"), tableOutput("data_checks"),
+        card(card_header("Data checks"), tbl("data_checks"),
              card_header("Table"), DTOutput("data_table")))
     )),
 
   # 2. Curve shape -------------------------------------------------------------------
-  nav_panel("Curve shape", icon = icon("chart-line"),
+  nav_panel("Curves", icon = icon("chart-line"),
     layout_sidebar(
       sidebar = sidebar(
         selectInput("fit_group", "Asset group", GROUPS, "Building A"),
@@ -79,10 +105,10 @@ ui <- page_navbar(
         actionButton("pert_reset", "Reset", class = "btn-sm"),
         p(class = "small text-muted", "The Sobol' analysis varies each multiplier within ±20%.")
       ),
-      layout_columns(col_widths = c(7, 5),
+      layout_columns(col_widths = two_col(7),
         card(card_header("Table vs. fitted vs. perturbed (logit scale)"),
              plotlyOutput("fit_plot", height = 420)),
-        card(card_header("Fit: logit(p) = a_s + b_s·log(g + c)"), tableOutput("fit_params"),
+        card(card_header("Fit: logit(p) = a_s + b_s·log(g + c)"), tbl("fit_params"),
              p(class = "small text-muted",
                "Three segments: A to C, C- to D-, F+ to F-. The fit describes the curve shape only;",
                "the sensitivity analysis perturbs the table itself."))),
@@ -90,14 +116,14 @@ ui <- page_navbar(
     )),
 
   # 3. Rating sensitivity -------------------------------------------------------------
-  nav_panel("Rating sensitivity", icon = icon("arrows-up-down"),
+  nav_panel("Ratings", icon = icon("arrows-up-down"),
     navset_card_underline(
       nav_panel("Notch changes",
         layout_sidebar(
           sidebar = sidebar(
             selectInput("ns_group", "Asset group", GROUPS, "Electrical A"),
             selectInput("ns_grade", "Observed grade", A$grades, "D-")),
-          layout_columns(col_widths = c(5, 7),
+          layout_columns(col_widths = two_col(5),
             card(card_header("If the grade is off by ±1 or ±2 notches"), plotlyOutput("ns_tornado", height = 330),
                  uiOutput("ns_text")),
             card(card_header("% change in P(fail) per notch (all groups)"),
@@ -110,16 +136,16 @@ ui <- page_navbar(
             radioButtons("mc_shape", "Spread", c("Even" = "uniform", "Falls off" = "triangular")),
             sliderInput("mc_bias", "Bias (+ = true grade tends to be worse)", -1.5, 1.5, 0, 0.25),
             selectInput("mc_group", "Asset group (chart)", GROUPS, "Electrical A")),
-          layout_columns(col_widths = c(6, 6),
+          layout_columns(col_widths = two_col(6),
             card(card_header("Expected P(fail) given the observed grade"), plotlyOutput("mc_curve", height = 380)),
             card(card_header("Expected ÷ table value (all groups)"), plotlyOutput("mc_heat", height = 620))),
           card(card_header("Misclassification matrix"), plotlyOutput("mc_matrix", height = 380))))
     )),
 
   # 4. Multi-year ----------------------------------------------------------------------
-  nav_panel("Multi-year risk", icon = icon("calendar-days"),
+  nav_panel("Multi-year", icon = icon("calendar-days"),
     layout_sidebar(
-      sidebar = sidebar(width = 320,
+      sidebar = sidebar(width = 300,
         selectizeInput("my_groups", "Asset groups (compare up to 6)", GROUPS, multiple = TRUE,
                        selected = c("Electrical A", "Concrete A"), options = list(maxItems = 6)),
         selectInput("my_grade", "Starting grade", A$grades, "C"),
@@ -137,10 +163,10 @@ ui <- page_navbar(
         checkboxInput("my_compare", "Also show 'no deterioration' for comparison", TRUE)
       ),
       uiOutput("my_boxes"),
-      layout_columns(col_widths = c(6, 6),
+      layout_columns(col_widths = two_col(6),
         card(card_header("Cumulative P(failed by end of year)"), plotlyOutput("my_cum", height = 380)),
         card(card_header("Annual P(fail in year | survived so far)"), plotlyOutput("my_haz", height = 380))),
-      layout_columns(col_widths = c(6, 6),
+      layout_columns(col_widths = two_col(6),
         card(card_header("Expected grade of survivors"), plotlyOutput("my_grade_plot", height = 300)),
         card(card_header("Year-by-year table"), DTOutput("my_table"))),
       card(card_header("Cumulative risk at the horizon, every group × starting grade"),
@@ -148,7 +174,7 @@ ui <- page_navbar(
     )),
 
   # 5. Global sensitivity ---------------------------------------------------------------
-  nav_panel("Global sensitivity", icon = icon("chart-bar"),
+  nav_panel("Sobol'", icon = icon("chart-bar"),
     cap_note,
     navset_card_underline(
       nav_panel("Single asset (L2)",
@@ -160,7 +186,7 @@ ui <- page_navbar(
             p(class = "small text-muted",
               "Inputs: grade (±1 notch, discrete uniform), curve level, slope, F-jump (each ±20%,",
               "uniform), and for 10-year runs the deterioration rate q ~ U(0, 0.3).")),
-          layout_columns(col_widths = c(6, 6),
+          layout_columns(col_widths = two_col(6),
             card(card_header("Sobol' indices with 95% CIs (dashed = dummy)"), plotlyOutput("gs_bars", height = 380),
                  uiOutput("gs_meta")),
             card(card_header("Total-order index Tᵢ across observed grades"), plotlyOutput("gs_grade_line", height = 380))),
@@ -172,7 +198,7 @@ ui <- page_navbar(
             selectInput("l3_structure", "Aggregation structure",
                         setNames(names(SYSTEM_STRUCTURES), sapply(SYSTEM_STRUCTURES, `[[`, "label"))),
             p(class = "small text-muted", "Example facility (invented for illustration):"),
-            tableOutput("l3_facility")),
+            tbl("l3_facility")),
           card(card_header("Sobol' indices for the example facility"), plotlyOutput("l3_bars", height = 520)))),
       nav_panel("Structure comparison",
         layout_sidebar(
@@ -182,11 +208,11 @@ ui <- page_navbar(
               "%d random facilities (4 to 10 components with random groups and grades), each analysed
                under every structure. This follows the paper's structure comparison.",
               A$settings$n_facilities))),
-          layout_columns(col_widths = c(6, 6),
+          layout_columns(col_widths = two_col(6),
             card(card_header("% of inputs non-influential"), plotlyOutput("sc_noninf", height = 380)),
             card(card_header("Median output"), plotlyOutput("sc_median", height = 380))),
           card(card_header("Friedman tests (facility = block) and BH-adjusted pairwise Wilcoxon"),
-               layout_columns(tableOutput("sc_friedman"), DTOutput("sc_pairwise")))))
+               layout_columns(col_widths = two_col(5), tbl("sc_friedman"), DTOutput("sc_pairwise")))))
     )),
 
   # 6. Uncertainty -------------------------------------------------------------------------
@@ -197,7 +223,7 @@ ui <- page_navbar(
         radioButtons("ua_horizon", "Output", c("Annual P(fail)" = 1, "10-year cumulative" = 10))),
       card(card_header("Output distribution under all input uncertainty: median and 95% interval vs. table value"),
            plotlyOutput("ua_band", height = 400)),
-      layout_columns(col_widths = c(6, 6),
+      layout_columns(col_widths = two_col(6),
         card(card_header("Width of 95% interval ÷ median (all groups)"), plotlyOutput("ua_heat", height = 620)),
         card(card_header("Example facility: output distributions by structure (log scale)"),
              radioButtons("ua_l3_h", NULL, c("Annual" = "annual", "10-year" = "ten_year"), inline = TRUE),
@@ -205,9 +231,9 @@ ui <- page_navbar(
     )),
 
   # 7. System builder ----------------------------------------------------------------------
-  nav_panel("System builder", icon = icon("diagram-project"),
+  nav_panel("System", icon = icon("diagram-project"),
     layout_sidebar(
-      sidebar = sidebar(width = 380,
+      sidebar = sidebar(width = 330,
         numericInput("sb_n", "Number of components", 5, 1, 10),
         uiOutput("sb_rows"),
         sliderInput("sb_years", "Horizon (years)", 1, 50, 10),
@@ -216,7 +242,7 @@ ui <- page_navbar(
         sliderInput("sb_k", "k (years per notch)", 1, 20, 5, 1),
         sliderInput("sb_q", "q (annual prob. of dropping a notch)", 0, 0.5, 0.2, 0.01)),
       uiOutput("sb_boxes"),
-      layout_columns(col_widths = c(6, 6),
+      layout_columns(col_widths = two_col(6),
         card(card_header("Component cumulative risk at the horizon"), plotlyOutput("sb_comp", height = 380)),
         card(card_header("Facility cumulative risk by year, per structure"), plotlyOutput("sb_years_plot", height = 380))),
       p(class = "small text-muted",
@@ -226,11 +252,10 @@ ui <- page_navbar(
 
   # 8. Methods ----------------------------------------------------------------------------
   nav_panel("Methods", icon = icon("book"),
-    card(card_body(includeMarkdown(file.path(ROOT, "apps", "shiny", "methods.md"))))),
+    card(card_body(includeMarkdown(file.path(ROOT, "apps", "shiny", "methods.md")),
+                   p(class = "small text-muted", sprintf("Results computed %s · n = R = %d.",
+                                                         A$settings$created, A$settings$iter_cap)))))
 
-  nav_spacer(),
-  nav_item(tags$span(class = "small text-muted",
-                     sprintf("Results: %s · n = R = %d", A$settings$created, A$settings$iter_cap)))
 )
 
 # ---- Server -----------------------------------------------------------------------
@@ -238,8 +263,8 @@ server <- function(input, output, session) {
 
   plotly_clean <- function(p) {
     p |>
-      layout(legend = list(orientation = "h", x = 0, y = -0.18, yanchor = "top"),
-             margin = list(b = 10)) |>
+      layout(legend = list(orientation = "h", x = 0, y = 1.02, xanchor = "left", yanchor = "bottom"),
+             margin = list(t = 40)) |>
       config(displaylogo = FALSE)
   }
 
@@ -282,7 +307,7 @@ server <- function(input, output, session) {
   output$data_checks <- renderTable(A$checks)
   output$data_table <- renderDT({
     w <- data.frame(asset_group = GROUPS, round(P, 5), check.names = FALSE)
-    datatable(w, rownames = FALSE, options = list(scrollX = TRUE, pageLength = 8, dom = "ftp"))
+    datatable(w, rownames = FALSE, options = list(scrollX = TRUE, pageLength = 8, dom = "ftp", pagingType = "simple"))
   })
 
   # 2. Curve shape ---------------------------------------------------------------------
@@ -318,7 +343,7 @@ server <- function(input, output, session) {
     f <- A$features
     num <- vapply(f, is.numeric, TRUE)
     f[num] <- lapply(f[num], signif, 3)
-    datatable(f, rownames = FALSE, options = list(scrollX = TRUE, pageLength = 8))
+    datatable(f, rownames = FALSE, options = list(scrollX = TRUE, pageLength = 8, dom = "ftp", pagingType = "simple"))
   })
 
   # 3a. Notch sensitivity ------------------------------------------------------------------
@@ -423,19 +448,20 @@ server <- function(input, output, session) {
       di <- d[d$asset_group == input$my_groups[i], ]
       cross <- di$year[di$cumulative >= input$my_threshold][1]
       value_box(title = input$my_groups[i],
-                value = sprintf("%s in %d yrs", fmt_p(tail(di$cumulative, 1)), input$my_years),
+                value = fmt_p(tail(di$cumulative, 1)),
+                p(sprintf("chance of failing within %d years", input$my_years)),
                 p(sprintf("Year 1: %s · reaches %.0f%% %s", fmt_p(di$annual_hazard[1]),
                           100 * input$my_threshold,
                           if (is.na(cross)) "after the horizon" else sprintf("in year %d", cross))),
                 theme = value_box_theme(bg = PAL[(i - 1) %% 10 + 1], fg = "white"))
     })
-    do.call(layout_column_wrap, c(list(width = 1 / min(3, length(boxes))), boxes))
+    do.call(layout_column_wrap, c(list(width = "220px", fill = FALSE), boxes))
   })
   output$my_table <- renderDT({
     d <- my_data()
     d[, c("expected_grade", "annual_hazard", "p_fail_in_year", "cumulative", "survival")] <-
       lapply(d[, c("expected_grade", "annual_hazard", "p_fail_in_year", "cumulative", "survival")], signif, 4)
-    datatable(d, rownames = FALSE, options = list(pageLength = 6, scrollX = TRUE, dom = "tp"))
+    datatable(d, rownames = FALSE, options = list(pageLength = 6, scrollX = TRUE, dom = "tp", pagingType = "simple"))
   })
   output$my_heat <- renderPlotly({
     z <- sapply(seq_along(A$grades), function(g) sapply(GROUPS, function(gr)
@@ -533,7 +559,7 @@ server <- function(input, output, session) {
   output$sc_pairwise <- renderDT({
     t <- A$structure_pairwise[A$structure_pairwise$horizon == as.numeric(input$sc_horizon), ]
     t$p_adj_BH <- signif(t$p_adj_BH, 3)
-    datatable(t, rownames = FALSE, options = list(pageLength = 5, dom = "tp"))
+    datatable(t, rownames = FALSE, options = list(pageLength = 5, scrollX = TRUE, dom = "tp", pagingType = "simple"))
   })
 
   # 6. Uncertainty -------------------------------------------------------------------
@@ -575,7 +601,7 @@ server <- function(input, output, session) {
     n <- input$sb_n; req(n >= 1, n <= 10)
     ex <- A$facility
     lapply(seq_len(n), function(i) {
-      layout_columns(col_widths = c(8, 4), gap = "0.3rem",
+      layout_columns(col_widths = c(9, 3), gap = "0.3rem",
         selectInput(paste0("sb_g", i), NULL, GROUPS,
                     isolate(input[[paste0("sb_g", i)]]) %||% ex$asset_group[(i - 1) %% nrow(ex) + 1]),
         selectInput(paste0("sb_r", i), NULL, A$grades,
@@ -599,11 +625,11 @@ server <- function(input, output, session) {
   output$sb_boxes <- renderUI({
     C <- sb_traj(); last <- C[nrow(C), , drop = FALSE]
     vals <- sapply(names(SYSTEM_STRUCTURES), function(s) aggregate_system(last, s))
-    do.call(layout_column_wrap, c(list(width = 1 / 5), lapply(seq_along(vals), function(k)
+    do.call(layout_column_wrap, c(list(width = "190px", fill = FALSE), lapply(seq_along(vals), function(k)
       value_box(title = SYSTEM_STRUCTURES[[k]]$label,
-                value = tags$span(style = "font-size:1.5rem",
-                                  if (names(vals)[k] == "expected") sprintf("%.2f", vals[k]) else fmt_p(vals[k])),
-                p(sprintf("by year %d", input$sb_years)),
+                value = if (names(vals)[k] == "expected") sprintf("%.2f", vals[k]) else fmt_p(vals[k]),
+                p(if (names(vals)[k] == "expected") sprintf("components failed by year %d", input$sb_years)
+                  else sprintf("by year %d", input$sb_years)),
                 theme = value_box_theme(bg = PAL[k], fg = "white")))))
   })
   output$sb_comp <- renderPlotly({

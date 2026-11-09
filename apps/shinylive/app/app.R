@@ -22,8 +22,13 @@ theme_set(theme_minimal(base_size = 14))
 pct <- function(x) sprintf("%.2f%%", 100 * x)
 
 ui <- page_navbar(
-  title = "Failure-Probability Sensitivity · Shinylive",
+  title = "Failure Sensitivity · Shinylive",
+  window_title = "Failure-Probability Sensitivity · Shinylive",
   theme = bs_theme(version = 5, bootswatch = "flatly", primary = "#2a6f97"),
+  header = tags$style(HTML("
+    .bslib-value-box .value-box-title, .bslib-value-box .value-box-value { overflow-wrap: normal; word-break: normal; }
+    .bslib-value-box .value-box-value { font-size: clamp(1.3rem, 0.9rem + 1.2vw, 1.9rem); line-height: 1.15; }
+    .card, .card-body, .bslib-sidebar-layout > .main { min-width: 0; }")),
   nav_panel("Multi-year risk",
     layout_sidebar(
       sidebar = sidebar(
@@ -77,10 +82,11 @@ server <- function(input, output, session) {
   })
   output$boxes <- renderUI({
     d <- traj()
-    do.call(layout_column_wrap, c(list(width = 1 / min(3, length(input$groups))),
+    do.call(layout_column_wrap, c(list(width = "220px", fill = FALSE),
       lapply(seq_along(input$groups), function(i) {
         di <- d[d$group == input$groups[i], ]
-        value_box(input$groups[i], sprintf("%s in %d yrs", pct(tail(di$cumulative, 1)), input$years),
+        value_box(input$groups[i], pct(tail(di$cumulative, 1)),
+                  p(sprintf("chance of failing within %d years", input$years)),
                   theme = value_box_theme(bg = PAL[i], fg = "white"))
       })))
   })
