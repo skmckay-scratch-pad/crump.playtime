@@ -1,0 +1,115 @@
+---
+title: "Failure-Probability Sensitivity · flexdashboard"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme:
+      version: 5
+      bootswatch: flatly
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+# flexdashboard option: R Markdown rendered once into a static page. It is
+# older than Quarto dashboards but still common in existing projects.
+# Interactivity comes from htmlwidgets (plotly, DT) and crosstalk filters,
+# which link widgets in the browser with no R server.
+knitr::opts_knit$set(root.dir = "../..")
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r data}
+source("R/_load_all.R")
+library(plotly); library(crosstalk); library(DT)
+A <- readRDS("results/app_data.rds")
+pl <- function(p) config(p, displaylogo = FALSE)
+```
+
+Multi-year risk {data-icon="fa-calendar"}
+=====================================
+
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+my <- A$multiyear[, c("asset_group", "start_grade", "scenario", "year", "annual_hazard", "cumulative")]
+my$annual_hazard <- signif(my$annual_hazard, 4); my$cumulative <- signif(my$cumulative, 4)
+my$scenario <- A$my_scenarios$label[match(my$scenario, A$my_scenarios$id)]
+my$key <- as.character(seq_len(nrow(my)))
+sd_my <- SharedData$new(my, key = ~key, group = "my")
+filter_select("grp", "Asset group", sd_my, ~asset_group, multiple = FALSE)
+filter_select("grd", "Starting grade", sd_my, ~start_grade, multiple = FALSE)
+filter_checkbox("scn", "Deterioration scenario", sd_my, ~scenario)
+```
+
+<script>
+// crosstalk has no built-in default selection; set one when the page loads
+$(function() { setTimeout(function() {
+  document.querySelector("#grp .selectized").selectize.setValue("Electrical A", false);
+  document.querySelector("#grd .selectized").selectize.setValue("C", false);
+}, 300); });
+</script>
+
+These are precomputed scenarios for years 1 to 30. A `crosstalk` filter selects
+the rows, and the chart and table update in the browser. For any q, k or horizon,
+use the Shiny app or the Quarto dashboard.
+
+Row
+-------------------------------------
+
+### Cumulative P(failed by year t)
+
+```{r}
+plot_ly(sd_my, x = ~year, y = ~cumulative, color = ~scenario, type = "scatter", mode = "lines",
+        colors = c("#2a6f97", "#e07a5f", "#3d405b")) |>
+  layout(yaxis = list(title = "P(failed by year t)", range = c(0, 1)), xaxis = list(title = "Year"),
+         legend = list(orientation = "h")) |> pl()
+```
+
+### Annual hazard (P fail in year | survived)
+
+```{r}
+plot_ly(sd_my, x = ~year, y = ~annual_hazard, color = ~scenario, type = "scatter", mode = "lines",
+        colors = c("#2a6f97", "#e07a5f", "#3d405b")) |>
+  layout(yaxis = list(title = "Annual hazard", type = "log"), xaxis = list(title = "Year"),
+         legend = list(orientation = "h")) |> pl()
+```
+
+Rating sensitivity {data-icon="fa-arrows-alt-v"}
+=====================================
+
+Row
+-------------------------------------
+
+### % change in P(fail) per notch of grade error
+
+```{r}
+e <- A$elasticity
+z <- tapply(e$pct_per_notch, list(e$asset_group, e$grade), identity)
+plot_ly(x = A$grades, y = rownames(z), z = z, type = "heatmap", colorscale = "YlOrRd", reversescale = TRUE) |>
+  layout(yaxis = list(autorange = "reversed", title = ""), xaxis = list(title = "")) |> pl()
+```
+
+### Sobol' total-order index (annual): mean over observed grades
+
+```{r}
+i <- A$l2_influence[A$l2_influence$horizon == 1, ]
+z <- tapply(i$Ti, list(i$asset_group, i$parameter), mean)
+plot_ly(x = colnames(z), y = rownames(z), z = z, type = "heatmap", colorscale = "Viridis") |>
+  layout(yaxis = list(autorange = "reversed", title = ""), xaxis = list(title = "")) |> pl()
+```
+
+Sobol' results table {data-icon="fa-table"}
+=====================================
+
+### All L2 indices. Iteration cap n = R = `r A$settings$iter_cap`, so CIs are wide; "influential" means distinguishable from the dummy.
+
+```{r}
+t <- A$l2_influence[, c("asset_group", "grade", "horizon", "parameter", "Si", "Si_low", "Si_high",
+                        "Ti", "Ti_low", "Ti_high", "influential")]
+num <- vapply(t, is.numeric, TRUE) & names(t) != "horizon"
+t[num] <- lapply(t[num], round, 3)
+datatable(t, rownames = FALSE, filter = "top", extensions = "Buttons", style = "default",
+          options = list(pageLength = 15, scrollX = TRUE, dom = "Bfrtip", buttons = c("csv")))
+```

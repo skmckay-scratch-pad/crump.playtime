@@ -7,3 +7,6 @@
 site/
 apps/shinylive/app/data/
 apps/shinylive/app/R/
+analysis/report.html
+apps/quarto-dashboard/dashboard.html
+apps/flexdashboard/flexdashboard.html

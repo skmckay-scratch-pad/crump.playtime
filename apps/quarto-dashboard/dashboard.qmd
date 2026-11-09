@@ -1,0 +1,189 @@
+---
+title: "Failure-Probability Sensitivity · Quarto dashboard"
+format:
+  dashboard:
+    theme: flatly
+    nav-buttons:
+      - icon: github
+        href: https://github.com/skmckay-scratch-pad/crump.playtime
+execute:
+  echo: false
+  warning: false
+  message: false
+knitr:
+  opts_knit:
+    root.dir: "../.."
+---
+
+```{r}
+#| include: false
+# Quarto dashboard option: R runs once at render time and produces a static
+# page. Interactive parts are plotly widgets (made in R) and Observable JS
+# cells (run in the browser). There is no R server.
+source("R/_load_all.R")
+library(plotly)
+A <- readRDS("results/app_data.rds")
+P <- A$p
+fmt_p <- function(x) sprintf("%.2f%%", 100 * x)
+pl <- function(p) config(p, displaylogo = FALSE)
+```
+
+# Overview
+
+## Row {height=22%}
+
+```{r}
+#| content: valuebox
+#| title: "Asset groups"
+list(value = nrow(P), icon = "building", color = "primary")
+```
+
+```{r}
+#| content: valuebox
+#| title: "Annual P(fail), grades A to F-"
+list(value = sprintf("%s – %s", fmt_p(min(P[, A$grades])), fmt_p(max(P[, A$grades]))),
+     icon = "activity", color = "info")
+```
+
+```{r}
+#| content: valuebox
+#| title: "D- → F+ jump (median)"
+list(value = sprintf("×%.2f", median(P[, "F+"] / P[, "D-"])), icon = "graph-up-arrow", color = "warning")
+```
+
+```{r}
+#| content: valuebox
+#| title: "Iteration cap (n = R)"
+list(value = A$settings$iter_cap, icon = "exclamation-triangle", color = "danger")
+```
+
+## Row
+
+```{r}
+#| title: Annual failure probability by grade (log scale; CF = worst case)
+d <- A$long
+plot_ly(d, x = ~rating, y = ~p_fail, color = ~asset_group, type = "scatter", mode = "lines+markers",
+        text = ~paste(asset_group, rating, fmt_p(p_fail)), hoverinfo = "text") |>
+  layout(yaxis = list(type = "log", title = "P(fail)"), xaxis = list(title = ""), showlegend = FALSE) |> pl()
+```
+
+```{r}
+#| title: "Change in P(fail) per notch of grade error (%)"
+e <- A$elasticity
+z <- tapply(e$pct_per_notch, list(e$asset_group, e$grade), identity)
+plot_ly(x = A$grades, y = rownames(z), z = z, type = "heatmap", colorscale = "YlOrRd", reversescale = TRUE,
+        hovertemplate = "%{y} %{x}: %{z:.0f}%<extra></extra>") |>
+  layout(yaxis = list(autorange = "reversed", title = ""), xaxis = list(title = "")) |> pl()
+```
+
+# Multi-year risk
+
+```{r}
+# Hand the probability table to Observable JS
+ojs_define(ptab = data.frame(group = A$long$asset_group, rating = as.character(A$long$rating),
+                             idx = A$long$rating_index, p = A$long$p_fail)[!A$long$is_cf, ],
+           grades = A$grades)
+```
+
+## Inputs {.sidebar}
+
+```{ojs}
+viewof groupSel = Inputs.select([...new Set(transpose(ptab).map(d => d.group))].sort(),
+  {label: "Asset groups", multiple: 6, value: ["Electrical A", "Concrete A"]})
+viewof startGrade = Inputs.select(grades, {label: "Starting grade", value: "C"})
+viewof horizon = Inputs.range([1, 50], {label: "Horizon (years)", step: 1, value: 20})
+viewof q = Inputs.range([0, 0.5], {label: "q: annual prob. of dropping a notch", step: 0.01, value: 0.2})
+```
+
+This calculator runs in your browser with Observable JS. It uses the same Markov
+model as the R function `multiyear_risk()`. Each year the asset fails with the
+annual P(fail) of its current grade. Survivors then drop one notch with
+probability *q*, stopping at F-. q = 0 means the grade does not change.
+
+## Results
+
+```{ojs}
+rows = transpose(ptab)
+curve = g => grades.map(gr => rows.find(r => r.group === g && r.rating === gr).p)
+
+function markov(p, g0, T, q) {
+  const n = p.length; let alive = new Array(n).fill(0); alive[g0] = 1;
+  const out = [];
+  for (let t = 1; t <= T; t++) {
+    const a = alive.map((v, i) => v * (1 - p[i]));
+    const nxt = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      if (i < n - 1) { nxt[i] += a[i] * (1 - q); nxt[i + 1] += a[i] * q; } else nxt[i] += a[i];
+    }
+    alive = nxt;
+    out.push({year: t, cumulative: 1 - alive.reduce((s, v) => s + v, 0)});
+  }
+  return out;
+}
+
+series = groupSel.flatMap(g => [
+  ...markov(curve(g), grades.indexOf(startGrade), horizon, q).map(d => ({...d, group: g, scenario: `q = ${q}`})),
+  ...markov(curve(g), grades.indexOf(startGrade), horizon, 0).map(d => ({...d, group: g, scenario: "no deterioration"}))
+])
+
+Plot.plot({
+  grid: true, color: {legend: true},
+  x: {label: "Year"}, y: {label: "P(failed by year t)", domain: [0, 1]},
+  marks: [
+    Plot.line(series, {x: "year", y: "cumulative", stroke: "group",
+                       strokeDasharray: d => d.scenario === "no deterioration" ? "4,4" : null}),
+    Plot.tip(series, Plot.pointerX({x: "year", y: "cumulative",
+             title: d => `${d.group} (${d.scenario})\nyear ${d.year}: ${(100*d.cumulative).toFixed(1)}%`}))
+  ]
+})
+```
+
+```{ojs}
+Inputs.table(groupSel.map(g => {
+  const s = markov(curve(g), grades.indexOf(startGrade), horizon, q);
+  const s0 = markov(curve(g), grades.indexOf(startGrade), horizon, 0);
+  return {group: g, [`P(fail) in ${horizon} yrs, q = ${q}`]: s.at(-1).cumulative,
+          [`… no deterioration`]: s0.at(-1).cumulative};
+}), {format: {[`P(fail) in ${horizon} yrs, q = ${q}`]: x => (100*x).toFixed(2) + "%",
+              [`… no deterioration`]: x => (100*x).toFixed(2) + "%"}})
+```
+
+# Global sensitivity
+
+## Row {.tabset}
+
+```{r}
+#| title: "Mean total-order index Tᵢ by group (annual)"
+i <- A$l2_influence[A$l2_influence$horizon == 1, ]
+z <- tapply(i$Ti, list(i$asset_group, i$parameter), mean)
+plot_ly(x = colnames(z), y = rownames(z), z = z, type = "heatmap", colorscale = "Viridis",
+        hovertemplate = "%{y}, %{x}: %{z:.2f}<extra></extra>") |>
+  layout(yaxis = list(autorange = "reversed", title = ""), xaxis = list(title = "")) |> pl()
+```
+
+```{r}
+#| title: "Tᵢ across observed grades (median over groups)"
+m <- aggregate(Ti ~ grade + parameter + horizon, A$l2_influence, median)
+m$horizon <- ifelse(m$horizon == 1, "annual", "10-year")
+plot_ly(m, x = ~grade, y = ~Ti, color = ~paste(parameter, "·", horizon), type = "scatter", mode = "lines+markers") |>
+  layout(yaxis = list(title = "median Tᵢ"), xaxis = list(title = "Observed grade")) |> pl()
+```
+
+```{r}
+#| title: "Structure comparison: % non-influential inputs"
+en <- A$ensemble
+en$h <- ifelse(en$horizon == 1, "annual", "10-year")
+plot_ly(en, x = ~structure, y = ~pct_noninfluential, color = ~h, type = "box") |>
+  layout(boxmode = "group", yaxis = list(title = "% non-influential"), xaxis = list(title = "")) |> pl()
+```
+
+## Row {height=25%}
+
+::: {.card title="About these results"}
+Sobol' indices are estimated with `sensobol` (Saltelli first-order, Jansen
+total-order). An input is non-influential if both its Sᵢ and Tᵢ confidence
+intervals overlap those of a dummy parameter. Every iteration count is capped at
+**`r A$settings$iter_cap`**, so the intervals are wide and none reach the 0.05
+convergence target. Read "non-influential" as "not shown to be influential at
+this sample size".
+:::

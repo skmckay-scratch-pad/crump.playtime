@@ -1,0 +1,30 @@
+Package: crumpplaytime
+Title: Sensitivity Analysis of Asset Failure-Probability Ratings
+Version: 0.1.0
+Description: Analysis project (not an installable package). This file lists the
+    R packages the analysis and apps need, so `pak::local_install_deps()` or
+    `remotes::install_deps()` can install them in one step.
+License: CC0
+Encoding: UTF-8
+Depends: R (>= 4.3)
+Imports:
+    readxl,
+    sensobol,
+    extraDistr,
+    data.table,
+    boot,
+    ggplot2,
+    scales,
+    knitr,
+    rmarkdown,
+    shiny,
+    bslib,
+    plotly,
+    DT,
+    crosstalk,
+    markdown,
+    flexdashboard,
+    shinylive
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

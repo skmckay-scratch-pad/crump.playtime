@@ -1,6 +1,6 @@
 # Plan: Sensitivity Analysis of Asset Failure-Probability Ratings
 
-**Status:** Draft v2 for review. Updated with answers to the open questions. No analysis has been run yet.
+**Status:** Approved and built. See "Changes made during the build" at the end of this file.
 
 **Decision context:** the analyses support decisions about **how likely infrastructure is to fail**. The main output throughout is therefore annual probability of failure, P(fail).
 
@@ -251,3 +251,16 @@ crump.playtime/
    probability over T years, 1 − (1 − p)ᵀ.**
 6. **Hosting:** default **run locally. Shinylive and Quarto are also set up so
    they can be published to GitHub Pages.**
+
+## 9. Changes made during the build
+
+| Change | Why |
+|---|---|
+| **Multi-year and cumulative risk added** to every app: 1 to 50 years, with no deterioration, a fixed schedule (one notch every *k* years) or Markov deterioration (probability *q* per year), and optional grade uncertainty | Requested after the plan was approved |
+| **Every iteration count capped at 250**: Sobol' base sample n = 250, bootstrap R = 250, 100 random facilities. No adaptive growth of n | Requested during the build. As a result, CIs do not reach the 0.05 target and dummy screening is weak. This is shown in every app and in the report |
+| The deterioration rate *q* ~ U(0, 0.3) is an extra input in the 10-year Sobol' runs | So multi-year risk has its own sensitivity analysis |
+| L3 uses shared slope and F-jump multipliers across components, with each component keeping its own grade and level | Curve-shape errors probably come from one common method. This also keeps the number of inputs down |
+| `targets` dropped in favour of a plain `analysis/run_analysis.R` | The package couldn't be installed in the build environment, and the pipeline only takes about 1 minute |
+| `renv` lockfile replaced by a `DESCRIPTION` that lists the packages | Packages were installed from several sources here, so a lockfile would be misleading |
+| `ggdist` raincloud plots replaced with plotly box plots and violins | Version conflict with ggplot2 in the build environment |
+| The static apps are deployed to **GitHub Pages** by GitHub Actions | Pages is enabled for Actions. The full Shiny app runs locally |

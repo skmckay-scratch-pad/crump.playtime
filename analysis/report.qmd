@@ -1,0 +1,201 @@
+---
+title: "Sensitivity of Asset Failure Probabilities to Condition Ratings"
+subtitle: "Analysis report: Steps 1 to 6 of plan.md"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-summary: "R code"
+    embed-resources: true
+    fig-width: 9
+    fig-height: 5
+execute:
+  warning: false
+  message: false
+knitr:
+  opts_knit:
+    root.dir: ".."
+---
+
+```{r setup}
+source("R/_load_all.R")
+library(ggplot2)
+A <- readRDS("results/app_data.rds")
+P <- A$p
+theme_set(theme_minimal(base_size = 12))
+pal <- c("#2a6f97", "#e07a5f", "#3d405b", "#81b29a", "#f2cc8f")
+s <- A$settings
+```
+
+::: {.callout-warning}
+## Iteration cap
+At the project's request, every iteration count is capped at **`r s$iter_cap`**:
+the base sample size *n*, the bootstrap replicates *R*, and the number of random
+facilities. Cushway et al. (2026) grew *n* until every confidence interval was
+narrower than 0.05, which took *n* ≥ 60,000. At *n* = `r s$n` the intervals are much
+wider, so read "non-influential" as **"not shown to be influential at this sample
+size"**.
+:::
+
+# 1. Data
+
+`r nrow(P)` asset groups × `r ncol(P)` ratings. A to F- are condition grades and CF is
+the conditional failure probability, the worst case.
+
+```{r checks}
+knitr::kable(A$checks)
+```
+
+```{r curves, fig.height=6}
+d <- A$long
+ggplot(d[!d$is_cf, ], aes(rating, p_fail, group = asset_group)) +
+  geom_line(alpha = 0.5, colour = pal[1]) +
+  geom_point(data = d[d$is_cf, ], shape = 5, colour = pal[2]) +
+  scale_y_log10(labels = scales::label_percent(accuracy = 0.01)) +
+  labs(x = NULL, y = "Annual P(fail), log scale",
+       title = "All 31 curves (diamonds = CF worst case)")
+```
+
+On the logit scale the steps between neighbouring grades shrink steadily from A
+to C. There is a smaller drop at C → C- and a **large jump at D- → F+**:
+
+```{r steps}
+L <- qlogis(P[, A$grades])
+lab <- paste(head(A$grades, -1), "→", A$grades[-1])
+D <- t(apply(L, 1, diff))                       # groups x 13 steps
+steps <- data.frame(step = factor(rep(lab, each = nrow(D)), levels = lab),
+                    value = as.vector(D))
+ggplot(steps, aes(step, value)) + geom_boxplot(fill = pal[1], alpha = 0.3) +
+  labs(x = NULL, y = "logit step") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# 2. Curve shape
+
+A piecewise model with three segments, `logit(p) = a_s + b_s·log(g + c)`, matches
+every group closely. The median logit RMSE is `r signif(median(A$fits$summary$rmse_logit), 2)`
+and the worst relative error is `r sprintf("%.1f%%", 100 * max(A$fits$summary$max_rel_err))`.
+The fit is descriptive only. The sensitivity analyses perturb the table directly.
+
+```{r fits}
+f <- A$fits$summary
+knitr::kable(head(f[order(-f$max_rel_err), c("asset_group", "offset", "rmse_logit", "max_rel_err")], 5),
+             digits = 4, caption = "Five worst-fitting groups")
+```
+
+# 3. One notch of grade error
+
+```{r notch, fig.height=6}
+e <- A$elasticity
+ggplot(e, aes(grade, asset_group, fill = pct_per_notch)) + geom_tile() +
+  scale_fill_viridis_c(option = "B", direction = -1, name = "% per notch") +
+  labs(x = NULL, y = NULL, title = "% change in annual P(fail) per notch of grade")
+```
+
+One notch matters most at the best grades and **around D-/F+**. From A, A- or B+,
+moving one notch worse raises P(fail) by 31% to 243%. Across C- to D-, one notch
+is worth only about 10% to 38%. At the D- → F+ boundary, a one-notch error changes P(fail)
+by `r sprintf("%.0f%% to %.0f%%", min(100*(e$worse_notch_ratio[e$grade=="D-"]-1)), max(100*(e$worse_notch_ratio[e$grade=="D-"]-1)))`.
+
+# 4. Misclassification
+
+With a 60/20/20 misclassification matrix (60% correct, 20% for each neighbouring
+notch), the expected P(fail) is **higher** than the table value at most grades,
+because the curves are convex:
+
+```{r mc, fig.height=6}
+mc <- misclass_effect(P, misclass_matrix(0.6, 1))
+ggplot(mc, aes(grade, asset_group, fill = bias_ratio)) + geom_tile() +
+  scale_fill_gradient2(midpoint = 1, low = pal[1], high = pal[2], name = "Expected ÷\ntable") +
+  labs(x = "Observed grade", y = NULL)
+```
+
+# 5. Multi-year risk
+
+Cumulative risk over *T* years is `1 − Π(1 − pₜ)`. When the grade can worsen over
+time (Markov deterioration with annual probability *q*), multi-year risk rises
+much faster than the constant-grade figure:
+
+```{r multiyear}
+my <- A$multiyear
+ex <- my[my$asset_group %in% c("Electrical A", "Concrete A", "Earthen A") & my$start_grade == "C", ]
+ggplot(ex, aes(year, cumulative, colour = scenario)) + geom_line(linewidth = 1) +
+  facet_wrap(~asset_group) + scale_colour_manual(values = pal[1:3]) +
+  labs(y = "P(failed by year t)", x = "Year", colour = NULL,
+       title = "Starting at grade C") + theme(legend.position = "bottom")
+```
+
+# 6. Global sensitivity: single asset (L2)
+
+The inputs are the grade (±1 notch) and the curve level, slope and F-jump (each
+±20%). The 10-year runs add the deterioration rate *q* ~ U(0, 0.3).
+
+```{r l2}
+i <- A$l2_influence
+agg <- aggregate(cbind(Ti, influential) ~ parameter + horizon, i, mean)
+agg$horizon <- ifelse(agg$horizon == 1, "Annual", "10-year")
+names(agg) <- c("Input", "Output", "Mean Tᵢ", "Share flagged influential")
+knitr::kable(agg, digits = 3)
+```
+
+```{r l2plot, fig.height=4}
+i$segment <- grade_segment(i$grade_index)
+ggplot(i[i$horizon == 1, ], aes(grade, Ti, colour = parameter, group = parameter)) +
+  stat_summary(fun = median, geom = "line", linewidth = 1) +
+  stat_summary(fun.data = function(y) data.frame(y = median(y), ymin = quantile(y, 0.1), ymax = quantile(y, 0.9)),
+               geom = "ribbon", alpha = 0.1, aes(fill = parameter), colour = NA) +
+  scale_colour_manual(values = pal) + scale_fill_manual(values = pal) +
+  labs(x = "Observed grade", y = "Total-order Tᵢ (median and 10th–90th percentile over groups)", colour = NULL, fill = NULL)
+```
+
+**Findings:**
+
+- The **grade** dominates at A to C, where the steps between grades are large.
+- **Curve slope** dominates across C- to D-, because the slope multiplier scales
+  the whole distance from grade A, which is large by then.
+- The **F-jump** only matters at F+ to F-.
+- The **level** (±20% odds) is a small contributor everywhere.
+- In 10-year runs, **deterioration rate** takes a noticeable share
+  (mean Tᵢ ≈ `r sprintf("%.2f", agg[agg$Input=="q","Mean Tᵢ"])`).
+
+```{r seg}
+knitr::kable(A$segment_tests, digits = 3,
+             caption = "Kruskal–Wallis: does Tᵢ differ by grade segment? (median Tᵢ per segment)")
+```
+
+# 7. Facility structures (L3)
+
+```{r ens, fig.height=4.5}
+en <- A$ensemble
+en$horizon <- ifelse(en$horizon == 1, "Annual", "10-year")
+ggplot(en, aes(structure, pct_noninfluential, fill = structure)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + geom_jitter(width = 0.15, alpha = 0.3, size = 0.8) +
+  facet_wrap(~horizon) + scale_fill_manual(values = pal, guide = "none") +
+  labs(x = NULL, y = "% inputs non-influential",
+       title = sprintf("%d random facilities", s$n_facilities))
+```
+
+```{r ens_tests}
+knitr::kable(A$structure_tests, digits = 3, caption = "Friedman tests (facility = block)")
+```
+
+As in the paper, the aggregation structure changes both the median output and
+how many inputs register as influential. At this sample size, however, most
+facility inputs (10 to 23 per facility) cannot be told apart from the dummy.
+This is the clearest cost of the 250-iteration cap.
+
+# 8. Cross-group patterns
+
+```{r spearman}
+sp <- A$spearman[A$spearman$p_adj_BH < 0.05, ]
+knitr::kable(sp[order(-abs(sp$rho)), ][1:10, ], digits = 3,
+             caption = "Strongest Spearman correlations: curve features vs. mean Tᵢ (BH-adjusted p < 0.05)")
+```
+
+# Settings
+
+```{r settings}
+str(s[c("iter_cap", "n", "R", "ci_tol", "grade_window", "curve_spread", "q_max", "n_facilities",
+        "created", "r_version", "sensobol_version")])
+```

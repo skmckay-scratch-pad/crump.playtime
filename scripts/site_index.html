@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Failure-Probability Sensitivity</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --ink: #1f2933; --muted: #5f6b7a;
+    --accent: #2a6f97; --accent-2: #e07a5f; --border: #e3e7ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14181d; --card: #1d232a; --ink: #e8ecf1; --muted: #9aa6b4;
+            --accent: #6fb1d6; --accent-2: #f0a08a; --border: #2c343d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--ink); line-height: 1.55; }
+  main { max-width: 980px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+  a.card { display: block; background: var(--card); border: 1px solid var(--border);
+           border-radius: 12px; padding: 18px 20px; color: inherit; text-decoration: none;
+           transition: border-color .15s, transform .15s; }
+  a.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .tag { display: inline-block; font-size: .75rem; font-weight: 600; letter-spacing: .02em;
+         color: var(--accent); text-transform: uppercase; }
+  .card h2 { font-size: 1.15rem; margin: 4px 0 6px; }
+  .card p { margin: 0; color: var(--muted); font-size: .93rem; }
+  .note { margin-top: 28px; padding: 14px 16px; border-left: 4px solid var(--accent-2);
+          background: var(--card); border-radius: 6px; font-size: .92rem; color: var(--muted); }
+  code { font-size: .9em; }
+  footer { margin-top: 32px; font-size: .85rem; color: var(--muted); }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Failure-Probability Sensitivity</h1>
+  <p class="lede">How sensitive are annual and multi-year failure probabilities for 31 infrastructure
+    asset groups to their condition grades (A to F-) and to the shape of the grade-to-probability curves?
+    The analysis is done in R and follows the global sensitivity workflow of Cushway et al. (2026).
+    The same results are shown in several web-app frameworks so they can be compared.</p>
+
+  <div class="grid">
+    <a class="card" href="shinylive/">
+      <span class="tag">Shiny · runs in browser</span>
+      <h2>Shinylive app</h2>
+      <p>A Shiny app compiled to WebAssembly (webR). The multi-year risk and misclassification tabs are
+        recomputed live in the browser. The first load takes 10 to 30 seconds.</p>
+    </a>
+    <a class="card" href="quarto-dashboard/">
+      <span class="tag">Quarto · static + OJS</span>
+      <h2>Quarto dashboard</h2>
+      <p>Rendered once from R. The multi-year calculator is written in Observable JS, so it is fully
+        interactive with no R running.</p>
+    </a>
+    <a class="card" href="flexdashboard/">
+      <span class="tag">R Markdown · static + crosstalk</span>
+      <h2>flexdashboard</h2>
+      <p>The older R Markdown dashboard format. Precomputed multi-year scenarios are filtered in the
+        browser with crosstalk, and the full Sobol' table can be searched and downloaded.</p>
+    </a>
+    <a class="card" href="report.html">
+      <span class="tag">Quarto · report</span>
+      <h2>Analysis report</h2>
+      <p>Each step with its R code: data checks, curve shape, notch and misclassification sensitivity,
+        multi-year risk, Sobol' indices, and facility structure comparison.</p>
+    </a>
+  </div>
+
+  <div class="note">
+    <strong>The full Shiny app</strong> (8 tabs, including the system builder) needs an R server, so it
+    is not hosted here. Run it locally from the repository root with
+    <code>shiny::runApp("apps/shiny")</code>.<br><br>
+    <strong>Iteration cap:</strong> every iteration count in the sensitivity analysis is capped at 250
+    (base sample and bootstrap replicates). The confidence intervals are therefore wide, and
+    "non-influential" means "not shown to be influential at this sample size".
+  </div>
+
+  <footer>
+    Data downloads: <a href="data/failure_probability_long.csv">failure probabilities (CSV)</a> ·
+    <a href="data/sobol_l2_indices.csv">Sobol' indices (CSV)</a>
+  </footer>
+</main>
+</body>
+</html>
