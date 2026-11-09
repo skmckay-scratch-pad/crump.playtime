@@ -1,6 +1,8 @@
 # Plan: Sensitivity Analysis of Asset Failure-Probability Ratings
 
-**Status:** Draft for review. No analysis has been run yet.
+**Status:** Draft v2 for review. Updated with answers to the open questions. No analysis has been run yet.
+
+**Decision context:** the analyses support decisions about **how likely infrastructure is to fail**. The main output throughout is therefore annual probability of failure, P(fail).
 
 ## 1. Goal
 
@@ -22,6 +24,11 @@ adapted here to this data, which has a different structure.
 ratings**.
 
 - Ratings, best to worst: `A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F+, F, F-, CF`.
+  - `A` to `F-` are **condition grades**, like school grades: A is good and F is bad.
+  - `CF` is the **conditional failure probability**, the worst case. It is the
+    top end of each curve, not a grade. Analyses report it but treat it
+    separately from grades: rating perturbations move between the 14 grades, and
+    "grade → CF" appears as a worst-case comparison.
 - Each value is an annual probability of failure.
 - Every row increases steadily from A to CF.
 - Ranges differ widely between groups. At A they run from about 0.03% (Concrete A,
@@ -31,7 +38,9 @@ ratings**.
   smoothly from A to C. It drops slightly at C → C-, and **jumps sharply at
   D- → F+** (usually about 1.1× before it and about 1.6–2.7× after). The table
   looks like it was generated from a model with about three segments
-  (A–C, C-–D-, F+–CF). Ratings near the D-/F+ boundary are therefore likely to
+  (A–C, C-–D-, F+–F-).
+- **Where the curves came from doesn't matter** (confirmed). The table is
+  treated as given. Ratings near the D-/F+ boundary are therefore likely to
   be the most sensitive.
 
 ## 3. How this data differs from the paper
@@ -41,6 +50,10 @@ one score with an equation**. Here, each asset group is a **lookup table**:
 rating in, probability out. A sensitivity analysis needs an output that
 depends on uncertain inputs, so this plan defines that output in three layers.
 Each layer answers a different question.
+
+**Priority:** L1 and L2 are the main analyses because they answer the
+failure-likelihood question for individual assets. L3 is an extension and
+needs a facility to analyse (see the open questions).
 
 | Layer | Question | Uncertain inputs | Output |
 |---|---|---|---|
@@ -80,9 +93,10 @@ and mean forms:
   the segment breaks.
 - Cluster the groups by curve shape, to see which asset types behave alike.
 
-### Step 2: Fit a curve to each group
+### Step 2: Fit a curve to each group (used as a tool, not a claim about where the data came from)
 - Fit a **piecewise-linear model on the logit scale** to each group, with
-  breakpoints near C/C- and D-/F+. The breakpoints can be fixed, or estimated
+  breakpoints near C/C- and D-/F+, across the 14 grades. CF is kept as a separate
+  worst-case anchor. The breakpoints can be fixed, or estimated
   with `segmented`.
 - This turns each 15-number row into a few parameters with a meaning: a level,
   a slope for each segment, and the size of the jump at F+. Those parameters
@@ -111,7 +125,7 @@ and mean forms:
 This mirrors the paper's Fig. 4 workflow:
 
 1. **Inputs and distributions.**
-   - Ratings are categorical, sampled as discrete uniform over all 15 ratings
+   - Ratings are categorical, sampled as discrete uniform over the 14 grades
      or over a narrower plausible window around an observed rating (an open
      question), using `extraDistr`.
    - Curve parameters vary ±X% around their fitted values, with uniform
@@ -213,25 +227,27 @@ crump.playtime/
 6. Alternative apps: Quarto dashboard, then Shinylive, then flexdashboard.
 7. A README with instructions for running everything.
 
-## 8. Open questions for you
+## 8. Open questions
 
-1. **What does `CF` mean?** Critical failure? Is it a real rating or an
-   end-of-life or absorbing state?
-2. **Do the letters A/B/C… in group names** (for example "Electrical A–E")
-   stand for subtypes, criticality classes or something else?
-3. **Where did the curves come from?** If they were made with a known model
-   (Weibull, Markov deterioration, expert elicitation), varying *that model's*
-   parameters is better than fitting a new curve to the table.
-4. **What is the decision behind this?** Inspection priorities, budgeting and
-   facility risk would each favour a different main output in L1–L3.
-5. **Is there a real or example facility inventory** (counts and ratings by
-   group)? If not, an example facility will be invented for L3 and labelled as
-   made up.
-6. **How uncertain are ratings in practice?** Is ±1 notch realistic? Is there
-   data on inspector agreement?
-7. **How much should curve parameters vary** in L2 and L3? ±20% is the starting
-   suggestion.
-8. **Time horizon:** annual only, or also cumulative over T years,
-   1 − (1 − p)ᵀ?
-9. **Hosting:** run locally, shinyapps.io, Posit Connect, or GitHub Pages
-   (which suits Shinylive and Quarto)?
+### Answered
+- **CF:** the conditional failure probability, the worst case. Handled as the
+  upper anchor of each curve, separate from the A to F- grades.
+- **Ratings:** A to F- are condition grades, like school grades (A good,
+  F bad).
+- **Where the curves came from:** doesn't matter. The table is treated as given.
+- **Decision context:** infrastructure failure likelihood. The main output is
+  P(fail), and L1/L2 come first.
+
+### Still open (the default in **bold** is used if there is no answer)
+1. **Letter suffixes in group names** ("Electrical A–E", "Metals A–E"): are
+   they subtypes? Default: **treat each as an independent asset group.**
+2. **Facility inventory for L3:** default: **an invented example facility
+   with one asset from each of 6 to 8 groups, clearly labelled as made up.**
+   The app's system builder lets users make their own.
+3. **How far can a grade realistically be off?** Default: **±1 notch, with a
+   60/20/20 misclassification matrix.** Users can change this in the app.
+4. **Curve-parameter variation for L2/L3:** default **±20%, uniform.**
+5. **Time horizon:** default **annual, with an app option for cumulative
+   probability over T years, 1 − (1 − p)ᵀ.**
+6. **Hosting:** default **run locally. Shinylive and Quarto are also set up so
+   they can be published to GitHub Pages.**
