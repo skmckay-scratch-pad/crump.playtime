@@ -1,0 +1,9 @@
+.Rhistory
+.RData
+.Rproj.user/
+*_files/
+*_cache/
+.quarto/
+site/
+apps/shinylive/app/data/
+apps/shinylive/app/R/
